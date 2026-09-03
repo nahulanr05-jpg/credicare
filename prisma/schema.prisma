@@ -1,0 +1,311 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              String           @id @default(uuid())
+  email           String           @unique
+  name            String
+  passwordHash    String
+  role            String           @default("CUSTOMER") // CUSTOMER | BANK_ANALYST | ADMIN
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  profile         Profile?
+  transactions    Transaction[]
+  incomeRecords   IncomeRecord[]
+  debts           Debt[]
+  loanScenarios   LoanScenario[]
+  snapshots       FinancialSnapshot[]
+  scores          FinancialScore[]
+  behaviorSignals BehaviorSignal[]
+  simulations     Simulation[]
+  recoveryPlans   RecoveryPlan[]
+  resilienceScores ResilienceScore[]
+  aiConversations AIConversation[]
+  notifications   Notification[]
+  
+  // As a customer in bank interventions
+  customerInterventions Intervention[] @relation("CustomerInterventions")
+  // As an analyst creating interventions
+  analystInterventions  Intervention[] @relation("AnalystInterventions")
+
+  @@index([role])
+}
+
+model Profile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone           String?
+  occupation      String?
+  monthlyIncome   Float    @default(50000)
+  targetSavings   Float    @default(10000)
+  emergencyTarget Float    @default(50000)
+  currency        String   @default("INR")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Category {
+  id           String        @id @default(uuid())
+  name         String        @unique
+  type         String        @default("EXPENSE") // INCOME | EXPENSE
+  isEssential  Boolean       @default(false)
+  transactions Transaction[]
+}
+
+model Transaction {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId    String?
+  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryName  String    // Food, Transport, Housing, Utilities, Shopping, Entertainment, Subscriptions, Healthcare, Education, EMI, Insurance, Other
+  amount        Float
+  type          String    // INCOME | EXPENSE
+  description   String
+  date          DateTime  @default(now())
+  paymentMethod String    @default("UPI") // UPI | DEBIT_CARD | CREDIT_CARD | NET_BANKING | CASH
+  isRecurring   Boolean   @default(false)
+  isEssential   Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId, date])
+  @@index([categoryName])
+}
+
+model IncomeRecord {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Float
+  source      String   // Salary, Freelance, Investment, Business, Other
+  date        DateTime @default(now())
+  isRecurring Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model Debt {
+  id           String        @id @default(uuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditor     String
+  name         String
+  totalAmount  Float
+  remainingAmount Float
+  interestRate Float         // Annual %
+  monthlyEMI   Float
+  tenureMonths Int
+  status       String        @default("ACTIVE") // ACTIVE | PAID | RESTRUCTURED
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  payments     DebtPayment[]
+
+  @@index([userId])
+}
+
+model DebtPayment {
+  id          String   @id @default(uuid())
+  debtId      String
+  debt        Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  amount      Float
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([debtId])
+}
+
+model LoanScenario {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loanType      String   @default("PERSONAL") // HOME | AUTO | PERSONAL | EDUCATION
+  desiredAmount Float
+  tenureMonths  Int
+  interestRate  Float
+  estimatedEMI  Float
+  readinessStatus String // READY | CAUTION | NOT_CURRENTLY_READY
+  dtiRatio      Float
+  assessmentReason String
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+model FinancialSnapshot {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime @default(now())
+  monthlyIncome   Float
+  monthlyExpenses Float
+  monthlySavings  Float
+  savingsRate     Float
+  debtObligations Float
+  discretionarySpending Float
+  essentialSpending Float
+  emergencyBuffer Float
+  healthScore     Float
+  healthStatus    String   // HEALTHY | STABLE_WATCH | EARLY_WARNING | FINANCIAL_STRESS | CRITICAL
+  riskLevel       String   // LOW | MODERATE | HIGH | CRITICAL
+  createdAt       DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model FinancialScore {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String   // HEALTH | RESILIENCE
+  score         Float
+  incomeStabilityScore Float @default(75)
+  savingsHealthScore   Float @default(70)
+  debtBurdenScore      Float @default(70)
+  spendingBehaviorScore Float @default(65)
+  emergencyBufferScore Float @default(60)
+  repaymentScore       Float @default(80)
+  date          DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model BehaviorSignal {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pattern        String   // SALARY_CYCLE_SPIKE | SAVINGS_DECLINE | LIFESTYLE_INFLATION | SUBSCRIPTION_ACCUMULATION | CREDIT_DEPENDENCY | IRREGULAR_SPENDING
+  title          String
+  severity       String   // LOW | MEDIUM | HIGH | CRITICAL
+  evidence       String
+  impact         String
+  recommendation String
+  isDismissed    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([userId, pattern])
+}
+
+model Simulation {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   // TIME_MACHINE | CRASH
+  scenarioName String
+  parameters  String   // JSON string
+  result      String   // JSON string
+  createdAt   DateTime @default(now())
+
+  @@index([userId, type])
+}
+
+model RecoveryPlan {
+  id              String           @id @default(uuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  description     String
+  status          String           @default("ACTIVE") // ACTIVE | COMPLETED | ABANDONED
+  targetBuffer    Float
+  targetSavingsRate Float
+  targetDebtReduction Float
+  strategy        String           @default("BALANCED") // HIGHEST_COST_FIRST | SMALLEST_BALANCE_FIRST | BALANCED_RECOVERY
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  actions         RecoveryAction[]
+
+  @@index([userId])
+}
+
+model RecoveryAction {
+  id          String       @id @default(uuid())
+  planId      String
+  plan        RecoveryPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  monthNumber Int
+  title       String
+  description String
+  targetAmount Float?
+  isCompleted Boolean      @default(false)
+  order       Int
+
+  @@index([planId, order])
+}
+
+model ResilienceScore {
+  id                 String   @id @default(uuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score              Float
+  shockAbsorptionDays Int
+  stressResistance   String   // HIGH | MODERATE | LOW | FRAGILE
+  date               DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Intervention {
+  id               String   @id @default(uuid())
+  analystId        String
+  analyst          User     @relation("AnalystInterventions", fields: [analystId], references: [id])
+  customerId       String
+  customer         User     @relation("CustomerInterventions", fields: [customerId], references: [id], onDelete: Cascade)
+  type             String   // FINANCIAL_COUNSELLING | PROACTIVE_CONTACT | REPAYMENT_ASSISTANCE | BUDGETING_SUPPORT | RESTRUCTURING_REVIEW
+  status           String   @default("RECOMMENDED") // RECOMMENDED | CONTACTED | ACCEPTED | DECLINED | RESOLVED | MONITORING
+  reason           String
+  customerResponse String?
+  outcomeNotes     String?
+  healthBefore     Float?
+  healthAfter      Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([analystId])
+  @@index([status])
+}
+
+model AIConversation {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String      @default("Financial Coach Session")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  messages  AIMessage[]
+
+  @@index([userId])
+}
+
+model AIMessage {
+  id             String         @id @default(uuid())
+  conversationId String
+  conversation   AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String         // user | assistant | system
+  content        String
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // WARNING | ACTION | FUTURE | LOAN | INFO
+  title     String
+  content   String
+  isRead    Boolean  @default(false)
+  linkUrl   String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+}
